@@ -5,7 +5,8 @@ var os = require('os');
 
 var Args = require("./args");
 var Tools = require("./tools");
-var Base = require('./base')
+var Base = require('./base');
+var yaml = require('js-yaml');
 
 module.exports = class Config extends Base {
 	
@@ -48,7 +49,7 @@ module.exports = class Config extends Base {
 	
 	parse(text) {
 		// default JSON parser (client can override)
-		return JSON.parse(text);
+		return JSON.parse(text)
 	}
 	
 	load() {
@@ -58,8 +59,16 @@ module.exports = class Config extends Base {
 		
 		var stats = fs.statSync( this.configFile );
 		this.mod = (stats && stats.mtime) ? stats.mtime.getTime() : 0;
-		
-		var config = this.parse( 
+		// By default use yaml config
+		var parseMethod = yaml.safeLoad;
+		if (/((\.yaml)|(\.yml))$/.test(this.configFile)) {
+			parseMethod = yaml.safeLoad;
+		} else if (/(\.json)$/.test(this.configFile)) {
+			parseMethod = JSON.parse;
+		} else {
+			parseMethod = this.parse;
+		}
+		var config = parseMethod( 
 			fs.readFileSync( this.configFile, { encoding: 'utf8' } )
 		);
 		for (var key in config) {
