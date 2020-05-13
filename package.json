@@ -1,0 +1,30 @@
+{
+  "name": "angkorjs",
+  "version": "1.0.2",
+  "dependencies": {
+    "async": "^3.2.0",
+    "chalk": "^4.0.0",
+    "daemon": "^1.1.0",
+    "errno": "^0.1.7",
+    "glob": "^7.1.6",
+    "mkdirp": "^1.0.4",
+    "rimraf": "^3.0.2",
+    "uncatch": "^1.0.2"
+  },
+  "description": "Generic server daemon and supports a component plug-in system built-in configuration file loading, command-line argument parsing, logging, and more.",
+  "main": "index.js",
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thodinh/angkorjs.git"
+  },
+  "author": "Tho Dinh (d.tr.tho@gmail.com)",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/thodinh/angkorjs/issues"
+  },
+  "homepage": "https://github.com/thodinh/angkorjs#readme"
+}
