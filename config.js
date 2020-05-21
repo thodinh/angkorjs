@@ -10,19 +10,24 @@ var yaml = require('js-yaml');
 
 module.exports = class Config extends Base {
 	
+	/**
+	 * AngkorConfig constructor
+	 * @param {string|any} thingy configuration object or path to configuration file
+	 * @param {number} watch interval time to check configurationb file is changed
+	 * @param {boolean} isa_sub is a sub configurateion (configuration of module)
+	 */
 	constructor (thingy, watch, isa_sub) {
-		super();
+		super(...arguments);
 		// class constructor
-        this.subs = {};
-        
-        this.configFile = "";
-        this.config = null;
-        this.args = null;
-        this.mod = 0;
-        this.timer = null;
-        this.freq = 10 * 1000;
-        this.hostname = '';
-        this.ip = '';
+        this.subs 			= {};
+        this.configFile 	= "";
+        this.config 		= null;
+        this.args 			= null;
+        this.mod 			= 0;
+		this.timer 			= null;
+        this.freq 			= 10 * 1000; // Thời gian timeout check và load lại config
+        this.hostname 		= '';
+        this.ip 			= '';
 		
 		if (thingy) {
 			if (typeof(thingy) == 'string') this.configFile = thingy;
@@ -46,12 +51,22 @@ module.exports = class Config extends Base {
 			this.monitor();
 		}
 	}
-	
+
+	/**
+	 * You can define your parse, example xml or anything
+	 * @param {*} text 
+	 */
 	parse(text) {
 		// default JSON parser (client can override)
 		return JSON.parse(text)
 	}
 	
+	/**
+	 * AngkorConfig can use yaml, json or any config file
+	 * 1. By default parse yaml
+	 * 2. The second default try to parse json
+	 * 3. The next will try parse by user defined
+	 */
 	load() {
 		// load config and merge in cmdline
 		var self = this;
@@ -193,48 +208,44 @@ module.exports = class Config extends Base {
 		}
 	}
 	
-	getEnv(callback) {
+	async getEnv() {
 		// determine environment (hostname and ip) async
 		var self = this;
 		
 		// get hostname and ip (async ops)
-		self.getHostname( function(err) {
-			if (err) callback(err);
-			else {
-				self.getIPAddress( callback );
-			}
-		} );
+		await self.getHostname();
+		await self.getIPAddress();
 	}
 	
-	getHostname(callback) {
+	async getHostname() {
 		// determine server hostname
 		this.hostname = (process.env['HOSTNAME'] || process.env['HOST'] || '').toLowerCase();
 		if (this.hostname) {
 			// well that was easy
-			callback();
-			return;
+			return this.hostname;
 		}
 		
 		// try the OS module
 		this.hostname = os.hostname().toLowerCase();
 		if (this.hostname) {
 			// well that was easy
-			callback();
-			return;
+			return this.hostname;
 		}
 		
 		// sigh, the hard way (exec hostname binary)
 		var self = this;
-		child = cp.execFile('/bin/hostname', function (error, stdout, stderr) {
-			self.hostname = stdout.toString().trim().toLowerCase();
-			if (!self.hostname) {
-				callback( new Error("Failed to determine server hostname via /bin/hostname") );
-			}
-			else callback();
-		} );
+		return new Promise((resolve, reject) => {
+			child = cp.execFile('/bin/hostname', function (error, stdout, stderr) {
+				self.hostname = stdout.toString().trim().toLowerCase();
+				if (!self.hostname) {
+					reject( new Error("Failed to determine server hostname via /bin/hostname") );
+				}
+				else resolve();
+			} );
+		})
 	}
 	
-	getIPAddress(callback) {
+	async getIPAddress() {
 		// determine server ip address
 		var self = this;
 		
@@ -255,8 +266,7 @@ module.exports = class Config extends Base {
 			if (addr && addr.address && addr.address.match(/^\d+\.\d+\.\d+\.\d+$/) && !addr.address.match(/^169\.254\./)) {
 				// found an interface that is not 169.254.* so go with that one
 				this.ip = addr.address;
-				callback();
-				return;
+				return this.ip;
 			}
 		}
 		
@@ -264,16 +274,17 @@ module.exports = class Config extends Base {
 		if (addr && addr.address && addr.address.match(/^\d+\.\d+\.\d+\.\d+$/)) {
 			// this will allow 169.254. to be chosen only after all other non-internal IPv4s are considered
 			this.ip = addr.address;
-			callback();
-			return;
+			return this.ip;
 		}
 		
-		// sigh, the hard way (DNS resolve the server hostname)
-		dns.resolve4(this.hostname, function (err, addresses) {
-			// if (err) callback(err);
-			self.ip = addresses ? addresses[0] : '127.0.0.1';
-			callback();
-		} );
+		return new Promise((resolve, reject) => {
+			// sigh, the hard way (DNS resolve the server hostname)
+			dns.resolve4(this.hostname, function (err, addresses) {
+				// if (err) reject(err);
+				self.ip = addresses ? addresses[0] : '127.0.0.1';
+				resolve(self.ip);
+			} );
+		})
 	}
 	
 	setPath(path, value) {

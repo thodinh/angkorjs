@@ -1,8 +1,10 @@
 
 module.exports = class Component {
 	
+	/**
+	 * class constructor
+	 */
 	constructor () {
-        // class constructor
         this.$_name = '';
         
         this.server = null;
@@ -34,20 +36,22 @@ module.exports = class Component {
 		}
 	}
 	
+	/**
+	 * override in subclass, return false to interrupt startup
+	 */
 	earlyStart() {
-		// override in subclass, return false to interrupt startup
 		return true;
 	}
 	
-	startup(callback) {
-		// override in subclass
-		callback();
-	}
+	/**
+	 * AngkorServer will call this method after startup
+	 */
+	async startup() { }
 	
-	shutdown(callback) {
-		// override in subclass
-		callback();
-	}
+	/**
+	 * AngkorServer will trigger this method before shutdown server
+	 */
+	async shutdown() { }
 	
 	debugLevel(level) {
 		// check if we're logging at or above the requested level

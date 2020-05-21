@@ -17,3 +17,6 @@ queue_dir: queue
 pid_file: logs/angkorjs.pid
 debug_level: 2
 debug: true
+echo: true
+color: white
+foreground: true

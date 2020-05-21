@@ -9,25 +9,37 @@ var Logger = require("./logger");
 var Config = require("./config");
 var Tools  = require("./tools");
 var Args   = require("./args");
-
+var Component = require('./component');
 
 module.exports = class AngkorServer extends Base {
 
+	/**
+	 * 
+	 * @param {{
+	 * $_name: string, 
+	 * $_version: string, 
+	 * configFile: string, 
+	 * config: Config,
+	 * components: Array<Component>
+	 * configOverrides: Config,
+	 * configOverridesFile: string
+	 * }} overrides 
+	 */
     constructor (overrides) {
-		super();
+		super(...arguments);
         this.$_name = "Angkor";
         this.$_version = "1.0";
         
         this.configFile = "";
         this.config = null;
         this.components = null;
-        this.tickTimer = null;
-        this.lastTickDate = null;
+        this._tickTimer = null;
+        this._lastTickDate = null;
         
         this.configOverrides = null;
-        this.coFile = '';
-        this.coModTime = 0;
-        this.coCheckTime = 0;
+        this.configOverridesFile = '';
+        this._configOverridesModTime = 0;
+        this._configOverridesCheckTime = 0;
 
         // class constructor
 		if (overrides) {
@@ -42,7 +54,7 @@ module.exports = class AngkorServer extends Base {
 				var comp = new compClass();
 				
 				// try to detect class name if not explicitly provided
-				if (!comp.$_name) comp.$_name = compClass.name || Object.getPrototypeOf(comp).constructor.name || 'Generic';
+				if (!comp.$_name) comp.$_name = compClass.name || Object.getPrototypeOf(comp).constructor.name || 'Angkor';
 				
 				this.components[idx] = comp;
 				this[ comp.$_name ] = comp;
@@ -61,14 +73,14 @@ module.exports = class AngkorServer extends Base {
 			var comp = new compClass();
 			
 			// try to detect class name if not explicitly provided
-			if (!comp.$_name) comp.$_name = compClass.name || Object.getPrototypeOf(comp).constructor.name || 'Generic';
+			if (!comp.$_name) comp.$_name = compClass.name || Object.getPrototypeOf(comp).constructor.name || 'Angkor';
 			
 			this.components.push( comp );
 			this[ comp.$_name ] = comp;
 		}
 	}
 	
-	__init(callback) {
+	async __init() {
 		// server initialization, private method (call startup() instead)
 		var self = this;
 		
@@ -82,11 +94,11 @@ module.exports = class AngkorServer extends Base {
 		if (this.multiConfig && !this.configFile) this.setupMultiConfig();
 		this.applyConfigOverrides();
 		
-		this.debug = this.config.get('debug') || false;
-		this.foreground = this.config.get('foreground') || false;
-		this.echo = this.config.get('echo') || false;
-		this.color = this.config.get('color') || false;
-		this.logDebugErrors = this.config.get('log_debug_errors') || false;
+		this.debug 				= this.config.get('debug') 				|| false;
+		this.foreground 		= this.config.get('foreground') 		|| false;
+		this.echo 				= this.config.get('echo') 				|| false;
+		this.color 				= this.config.get('color') 				|| false;
+		this.logDebugErrors 	= this.config.get('log_debug_errors') 	|| false;
 		
 		// create base log dir
 		if (this.config.get('log_dir')) {
@@ -225,14 +237,9 @@ module.exports = class AngkorServer extends Base {
 		}
 		
 		// determine server hostname and ip, create dirs
-		this.config.getEnv( function(err) {
-			if (err) throw(err);
-			
-			self.hostname = self.config.hostname;
-			self.ip = self.config.ip;
-			
-			callback();
-		} );
+		await this.config.getEnv();
+		self.hostname = self.config.hostname;
+		self.ip = self.config.ip;
 	}
 	
 	setupMultiConfig() {
@@ -316,24 +323,24 @@ module.exports = class AngkorServer extends Base {
 		
 		// allow overrides via special file containing json paths (in dot or slash notation)
 		if (this.config.get('config_overrides_file')) {
-			this.coFile = this.config.get('config_overrides_file');
-			this.coModTime = 0;
-			this.coCheckTime = Tools.timeNow(true);
+			this.configOverridesFile = this.config.get('config_overrides_file');
+			this._configOverridesModTime = 0;
+			this._configOverridesCheckTime = Tools.timeNow(true);
 			this.configOverrides = null;
 			try {
-				var stats = fs.statSync( this.coFile );
-				this.coModTime = stats.mtime.getTime();
+				var stats = fs.statSync( this.configOverridesFile );
+				this._configOverridesModTime = stats.mtime.getTime();
 			}
 			catch(err) {
-				this.logDebug(3, "Config overrides file not found, skipping: " + this.coFile);
+				this.logDebug(3, "Config overrides file not found, skipping: " + this.configOverridesFile);
 			}
-			if (this.coModTime) {
-				this.logDebug(8, "Loading config overrides file: " + this.coFile);
+			if (this._configOverridesModTime) {
+				this.logDebug(8, "Loading config overrides file: " + this.configOverridesFile);
 				try {
-					this.configOverrides = JSON.parse( fs.readFileSync( this.coFile, 'utf8' ) );
+					this.configOverrides = JSON.parse( fs.readFileSync( this.configOverridesFile, 'utf8' ) );
 				}
 				catch (err) {
-					this.logError('config', "Config overrides file could not be loaded, skipping: " + this.coFile + ": " + err);
+					this.logError('config', "Config overrides file could not be loaded, skipping: " + this.configOverridesFile + ": " + err);
 					this.configOverrides = null;
 				}
 			}
@@ -350,16 +357,14 @@ module.exports = class AngkorServer extends Base {
 		}
 	}
 	
-	startup(callback) {
+	async startup() {
 		// setup server and fire callback
 		var self = this;
-		
-		this.__init( function() {
-			self.startupFinish(callback);
-		} );
+		await this.__init();
+		await self.startupFinish();
 	}
 	
-	startupFinish(callback) {
+	async startupFinish() {
 		// finish startup sequence
 		var self = this;
 		
@@ -394,22 +399,12 @@ module.exports = class AngkorServer extends Base {
 		this.emit('prestart');
 		
 		// load components (async)
-		async.eachSeries( this.components, 
-			function(comp, callback) {
-				// start component
-				self.logDebug(3, "Starting component: " + comp.$_name);
-				comp.startup( callback );
-			},
-			function(err) {
-				// all components started
-				if (err) {
-					self.logError('startup', "Component startup error: " + err);
-					self.logDebug(1, "Component startup error: " + err);
-					self.shutdown();
-				}
-				else self.run(callback);
-			}
-		); // foreach component
+		for (var idx in this.components) {
+			var comp = this.components[idx];
+			self.logDebug(3, "Starting component: " + comp.$_name);
+			await comp.startup();
+		}
+		self.run();
 	}
 	
 	initComponents() {
@@ -429,7 +424,7 @@ module.exports = class AngkorServer extends Base {
 		return true;
 	}
 	
-	run(callback) {
+	run() {
 		// this is called at the very end of the startup process
 		// all components are started
 		
@@ -441,16 +436,13 @@ module.exports = class AngkorServer extends Base {
 		}
 		
 		// start tick timer for periodic tasks
-		this.lastTickDate = Tools.getDateArgs( new Date() );
-		this.tickTimer = setInterval( this.tick.bind(this), 1000 );
+		this._lastTickDate = Tools.getDateArgs( new Date() );
+		this._tickTimer = setInterval( this.tick.bind(this), 1000 );
 		
 		// start server main loop
 		this.logDebug(2, "Startup complete, entering main loop");
 		this.emit('ready');
 		this.started = Tools.timeNow(true);
-		
-		// fire callback if provided
-		if (callback) callback();
 	}
 	
 	tick() {
@@ -460,29 +452,29 @@ module.exports = class AngkorServer extends Base {
 		
 		// also emit minute, hour and day events when they change
 		var dargs = Tools.getDateArgs( new Date() );
-		if (dargs.min != this.lastTickDate.min) {
+		if (dargs.min != this._lastTickDate.min) {
 			this.emit('minute', dargs);
 			this.emit( dargs.hh + ':' + dargs.mi, dargs );
 			this.emit( ':' + dargs.mi, dargs );
 		}
-		if (dargs.hour != this.lastTickDate.hour) this.emit('hour', dargs);
-		if (dargs.mday != this.lastTickDate.mday) this.emit('day', dargs);
-		if (dargs.mon != this.lastTickDate.mon) this.emit('month', dargs);
-		if (dargs.year != this.lastTickDate.year) this.emit('year', dargs);
-		this.lastTickDate = dargs;
+		if (dargs.hour != this._lastTickDate.hour) this.emit('hour', dargs);
+		if (dargs.mday != this._lastTickDate.mday) this.emit('day', dargs);
+		if (dargs.mon != this._lastTickDate.mon) this.emit('month', dargs);
+		if (dargs.year != this._lastTickDate.year) this.emit('year', dargs);
+		this._lastTickDate = dargs;
 		
 		// monitor config overrides file
-		if (this.coModTime && (dargs.epoch - this.coCheckTime >= this.config.freq / 1000)) {
-			this.coCheckTime = dargs.epoch;
+		if (this._configOverridesModTime && (dargs.epoch - this._configOverridesCheckTime >= this.config.freq / 1000)) {
+			this._configOverridesCheckTime = dargs.epoch;
 			
-			fs.stat( this.coFile, function(err, stats) {
+			fs.stat( this.configOverridesFile, function(err, stats) {
 				// ignore errors here due to possible race conditions
 				var mod = (stats && stats.mtime) ? stats.mtime.getTime() : 0;
 				
-				if (mod && (mod != self.coModTime)) {
+				if (mod && (mod != self._configOverridesModTime)) {
 					// file has changed on disk, schedule a reload
-					self.coModTime = mod;
-					self.logDebug(3, "Config overrides file has changed on disk, scheduling reload: " + self.coFile);
+					self._configOverridesModTime = mod;
+					self.logDebug(3, "Config overrides file has changed on disk, scheduling reload: " + self.configOverridesFile);
 					self.config.mod = 0;
 					self.config.check();
 				}
@@ -490,7 +482,7 @@ module.exports = class AngkorServer extends Base {
 		}
 	}
 	
-	shutdown(callback) {
+	async shutdown() {
 		// shutdown all components
 		var self = this;
 		this.logger.set('sync', true);
@@ -514,9 +506,9 @@ module.exports = class AngkorServer extends Base {
 		this.shut = true;
 		
 		// stop tick timer
-		if (this.tickTimer) {
-			clearTimeout( this.tickTimer );
-			delete this.tickTimer;
+		if (this._tickTimer) {
+			clearTimeout( this._tickTimer );
+			delete this._tickTimer;
 		}
 		
 		// stop config monitors
@@ -534,28 +526,21 @@ module.exports = class AngkorServer extends Base {
 			this.emit('shutdown');
 			process.exit(1);
 		}
-		
-		// stop components
-		async.eachSeries( this.components.reverse(), 
-			function(comp, callback) {
-				// stop component
+		try {
+			for (var idx in this.components) {
+				var comp = this.components[idx];
 				self.logDebug(3, "Stopping component: " + comp.$_name);
-				comp.shutdown( callback );
-			},
-			function(err) {
-				// all components stopped
-				self.components = [];
-				if (err) {
-					self.logError(1, "Component shutdown error: " + err);
-					process.exit(1);
-				}
-				else {
-					self.logDebug(2, "Shutdown complete, exiting");
-					self.emit('shutdown');
-					if (callback) callback();
-				}
+				await comp.shutdown();
 			}
-		); // foreach component
+
+			self.components = [];
+			self.logDebug(2, "Shutdown complete, exiting");
+			self.emit('shutdown');
+		}
+		catch(err) {
+			self.logError(1, "Component shutdown error: " + err);
+			process.exit(1);
+		}
 	}
 	
 	debugLevel(level) {
